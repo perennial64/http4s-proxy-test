@@ -1,14 +1,14 @@
 package proxytest
 
-import munit.FunSuite
+import munit.CatsEffectSuite
 import org.http4s.{Headers, Method}
 
-class DirectSuite extends FunSuite with ProxyTestSupport:
+class DirectSuite extends CatsEffectSuite with ProxyTestSupport:
     test("direct HTTP/1.1 request completes and does not use a proxy"):
-        assertDirectRequest(Method.GET, payload = None, headers = Headers(), http2 = false)
+        assertDirectRequest(Method.GET, payload = None, Headers(), http2 = false)
 
     test("direct http/2 request completes and does not use a proxy"):
-        assertDirectRequest(Method.GET, payload = None, headers = Headers(), http2 = true)
+        assertDirectRequest(Method.GET, payload = None, Headers(), http2 = true)
 
     test("direct HTTP/1.1 request echoes headers and payload"):
         assertDirectRequest(

@@ -1,29 +1,29 @@
 package proxytest
 
 import com.comcast.ip4s.*
-import munit.FunSuite
+import munit.CatsEffectSuite
 import org.http4s.ember.client.{Socks5Credentials, Socks5Proxy}
 import org.http4s.{Headers, Method}
 
-class Socks5ProxySuite extends FunSuite with ProxyTestSupport:
+class Socks5ProxySuite extends CatsEffectSuite with ProxyTestSupport:
     val credentials = Socks5Credentials("testuser", "testpass")
     val invalidCredentials = Socks5Credentials("wrong-user", "wrong-password")
 
     test("HTTP/1.1 request without auth"):
         val proxy = Socks5Proxy(host"127.0.0.1", port"1080")
-        assertRequestThrough(proxy, Method.GET, payload = None, headers = Headers(), http2 = false)
+        assertRequestThrough(proxy, Method.GET, payload = None, Headers(), http2 = false)
 
     test("HTTP/2 request without auth"):
         val proxy = Socks5Proxy(host"127.0.0.1", port"1080")
-        assertRequestThrough(proxy, Method.GET, payload = None, headers = Headers(), http2 = true)
+        assertRequestThrough(proxy, Method.GET, payload = None, Headers(), http2 = true)
 
     test("HTTP/1.1 request with auth"):
         val proxy = Socks5Proxy(host"127.0.0.1", port"1081", Some(credentials))
-        assertRequestThrough(proxy, Method.GET, payload = None, headers = Headers(), http2 = false)
+        assertRequestThrough(proxy, Method.GET, payload = None, Headers(), http2 = false)
 
     test("HTTP/2 request with auth"):
         val proxy = Socks5Proxy(host"127.0.0.1", port"1081", Some(credentials))
-        assertRequestThrough(proxy, Method.GET, payload = None, headers = Headers(), http2 = true)
+        assertRequestThrough(proxy, Method.GET, payload = None, Headers(), http2 = true)
 
     test("HTTP/1.1 request forwards headers and payload"):
         val proxy = Socks5Proxy(host"127.0.0.1", port"1080")
@@ -47,5 +47,5 @@ class Socks5ProxySuite extends FunSuite with ProxyTestSupport:
 
     test("rejects invalid credentials"):
         val proxy = Socks5Proxy(host"127.0.0.1", port"1081", Some(invalidCredentials))
-        assertRejected(request(Some(proxy), Method.GET, payload = None, headers = Headers(), http2 = false))
+        assertRejected(request(Some(proxy), Method.GET, payload = None, Headers(), http2 = false))
 

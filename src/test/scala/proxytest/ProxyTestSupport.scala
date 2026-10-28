@@ -1,17 +1,16 @@
 package proxytest
 
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
 import com.comcast.ip4s.Host
 import fs2.io.net.Network
-import munit.FunSuite
+import munit.CatsEffectSuite
 import org.http4s.ember.client.*
 import org.http4s.syntax.literals.uri
 import org.http4s.{BasicCredentials, Header, Headers, Method, Request, Uri}
 import org.typelevel.ci.CIString
 
 trait ProxyTestSupport:
-    self: FunSuite =>
+    self: CatsEffectSuite =>
 
     protected val h1Backend = uri"http://127.0.0.1:9000/"
     protected val h2Backend = uri"https://127.0.0.1:9443/"
@@ -35,7 +34,7 @@ trait ProxyTestSupport:
         payload: Option[String],
         headers: Headers,
         http2: Boolean
-    ): Unit =
+    ): IO[Unit] =
         assertRequestEcho("with proxy", Some(proxy), method, payload, headers, http2)
 
     protected def assertDirectRequest(
@@ -43,7 +42,7 @@ trait ProxyTestSupport:
         payload: Option[String],
         headers: Headers,
         http2: Boolean
-    ): Unit =
+    ): IO[Unit] =
         assertRequestEcho("no proxy", None, method, payload, headers, http2)
 
     private def assertRequestEcho(
@@ -53,15 +52,15 @@ trait ProxyTestSupport:
         payload: Option[String],
         headers: Headers,
         http2: Boolean
-    ): Unit =
-        val response = request(proxy, method, payload, headers, http2).unsafeRunSync()
-        val protocol = if http2 then "HTTP/2.0" else "HTTP/1.1"
+    ): IO[Unit] =
+        request(proxy, method, payload, headers, http2).map: response =>
+            val protocol = if http2 then "HTTP/2.0" else "HTTP/1.1"
 
-        assert(response.startsWith(s"$route\n${method.name} / $protocol\r\n"), response)
-        payload.foreach(value => assert(response.endsWith(s"\r\n\r\n$value"), response))
-        headers.foreach: h =>
-            assert(response.contains(s"\r\n${h.name}: ${h.value}\r\n"), response)
+            assert(response.startsWith(s"$route\n${method.name} / $protocol\r\n"), response)
+            payload.foreach(value => assert(response.endsWith(s"\r\n\r\n$value"), response))
+            headers.foreach: h =>
+                assert(response.contains(s"\r\n${h.name}: ${h.value}\r\n"), response)
 
-    protected def assertRejected(response: IO[String]): Unit =
-        assert(response.attempt.unsafeRunSync().isLeft)
+    protected def assertRejected(response: IO[String]): IO[Unit] =
+        response.attempt.map(result => assert(result.isLeft))
 
