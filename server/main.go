@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/tls"
@@ -9,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 	"time"
 
 	corechain "github.com/go-gost/core/chain"
@@ -43,7 +45,8 @@ const (
 	socks4Addr     = "127.0.0.1:1082"
 	socks4AuthAddr = "127.0.0.1:1083"
 	backendAddr    = "127.0.0.1:9000"
-	backendTLSAddr = "127.0.0.1:9443"
+	backendTLSPort = "9443"
+	backendTLSAddr = "127.0.0.1:" + backendTLSPort
 
 	proxyUser = "testuser"
 	proxyPass = "testpass"
@@ -116,11 +119,11 @@ func main() {
 
 	baseOpts := []corehandler.Option{corehandler.RouterOption(router), corehandler.LoggerOption(log)}
 
-	mustInit("http", httpAddr, false, xhandlerhttp.NewHandler(baseOpts...))
-	mustInit("http-auth", httpAuthAddr, false, xhandlerhttp.NewHandler(append(baseOpts, auther)...))
+	mustInit("http", httpAddr, false, noConnectHandler{xhandlerhttp.NewHandler(baseOpts...)})
+	mustInit("http-auth", httpAuthAddr, false, noConnectHandler{xhandlerhttp.NewHandler(append(baseOpts, auther)...)})
 
-	mustInit("https", httpsAddr, true, xhandlerhttp.NewHandler(baseOpts...))
-	mustInit("https-auth", httpsAuthAddr, true, xhandlerhttp.NewHandler(append(baseOpts, auther)...))
+	mustInit("https", httpsAddr, true, noConnectHandler{xhandlerhttp.NewHandler(baseOpts...)})
+	mustInit("https-auth", httpsAuthAddr, true, noConnectHandler{xhandlerhttp.NewHandler(append(baseOpts, auther)...)})
 
 	mustInitHTTP2 := func(name, addr string, h corehandler.Handler) {
 		config := tlsConfig.Clone()
@@ -200,6 +203,72 @@ func (l *markerListener) Accept() (net.Conn, error) {
 type taggedConn struct {
 	*markedConn
 	viaProxy bool
+}
+
+const connectMethodPrefix = "CONNECT "
+const connectRejectedBody = "CONNECT is not allowed to this port\n"
+
+var connectAllowedPorts = map[string]bool{"443": true, backendTLSPort: true}
+
+type bufferedConn struct {
+	net.Conn
+	reader *bufio.Reader
+}
+
+func (c *bufferedConn) Read(p []byte) (int, error) { return c.reader.Read(p) }
+
+// noConnectHandler refuses CONNECT to ports outside connectAllowedPorts
+type noConnectHandler struct {
+	corehandler.Handler
+}
+
+func (h noConnectHandler) Handle(ctx context.Context, conn net.Conn, opts ...corehandler.HandleOption) error {
+	reader := bufio.NewReader(conn)
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	prefix, err := reader.Peek(len(connectMethodPrefix))
+	conn.SetReadDeadline(time.Time{})
+
+	if err == nil && bytes.Equal(prefix, []byte(connectMethodPrefix)) {
+		// The whole request arrives in one write, so it is already buffered.
+		head, _ := reader.Peek(reader.Buffered())
+		if port, ok := connectTargetPort(head); !ok || !connectAllowedPorts[port] {
+			defer conn.Close()
+			return rejectConnect(conn)
+		}
+	}
+
+	return h.Handler.Handle(ctx, &bufferedConn{Conn: conn, reader: reader}, opts...)
+}
+
+// connectTargetPort reports the port of an authority-form CONNECT target, or
+// false when the peeked bytes hold no complete request line.
+func connectTargetPort(head []byte) (string, bool) {
+	before, _, ok := bytes.Cut(head, []byte{'\n'})
+	if !ok {
+		return "", false
+	}
+	fields := bytes.Fields(before)
+	if len(fields) < 2 {
+		return "", false
+	}
+	_, port, err := net.SplitHostPort(string(fields[1]))
+	if err != nil {
+		return "", false
+	}
+	return port, true
+}
+
+func rejectConnect(conn net.Conn) error {
+	resp := &http.Response{
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		StatusCode:    http.StatusForbidden,
+		Header:        http.Header{"Content-Type": []string{"text/plain"}},
+		Body:          io.NopCloser(strings.NewReader(connectRejectedBody)),
+		ContentLength: int64(len(connectRejectedBody)),
+	}
+	return resp.Write(conn)
 }
 
 // startBackends runs plain HTTP and TLS HTTP/1.1+HTTP/2 servers that report
