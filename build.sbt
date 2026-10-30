@@ -16,7 +16,7 @@ lazy val root = crossProject(JVMPlatform, JSPlatform, NativePlatform)
         name := "http4s-proxy-test",
         resolvers += Resolver.mavenLocal,
         libraryDependencies ++= Seq(
-            "org.http4s" %%% "http4s-ember-client" % "0.23.38-101-c15e49d-SNAPSHOT",
+            "org.http4s" %%% "http4s-ember-client" % "0.23.38-104-0044ff9-SNAPSHOT",
             "org.typelevel" %%% "munit-cats-effect" % "2.2.1" % Test
         ),
         testFrameworks += new TestFramework("munit.Framework")
