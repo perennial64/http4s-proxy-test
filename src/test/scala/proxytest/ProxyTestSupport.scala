@@ -25,7 +25,8 @@ trait ProxyTestSupport:
         val uri = if http2 then h2Backend else h1Backend
         val base = Request[IO](method = method, uri = uri, headers = headers)
         val outgoing = payload.fold(base)(base.withEntity)
-        val builder = proxy.fold(EmberClientBuilder.default[IO])(EmberClientBuilder.default[IO].withProxy)
+        val default = EmberClientBuilder.default[IO].withoutProxyIgnoredHosts
+        val builder = proxy.fold(default)(default.withProxy)
         (if http2 then builder.withHttp2 else builder).build.use(_.expect[String](outgoing))
 
     protected def assertRequestThrough(
